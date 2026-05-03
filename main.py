@@ -25,6 +25,7 @@ def parse_args():
     p.add_argument("--eval-games", type=int)
     p.add_argument("--iterations", type=int)
     p.add_argument("--checkpoint-dir", type=str, default="checkpoints")
+    p.add_argument("--pretrain", type=str, help="Path to pretrained checkpoint to start from")
     return p.parse_args()
 
 
@@ -65,6 +66,11 @@ def main():
     os.makedirs(ckpt_dir, exist_ok=True)
 
     network = AlphaZeroNet(config.num_res_blocks, config.num_channels).to(config.device)
+
+    if args.pretrain:
+        print(f"Loading pretrained checkpoint: {args.pretrain}")
+        network.load_state_dict(torch.load(args.pretrain, map_location=config.device, weights_only=True))
+
     replay_buffer = ReplayBuffer(config.replay_buffer_size)
 
     param_count = sum(p.numel() for p in network.parameters())

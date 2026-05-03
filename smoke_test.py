@@ -83,8 +83,8 @@ def test_self_play_and_train():
     )
     net = AlphaZeroNet(config.num_res_blocks, config.num_channels).to(config.device)
 
-    from alphazero.self_play import play_one_game
-    data = play_one_game(net, config)
+    from alphazero.self_play import run_self_play
+    data = run_self_play(net, config)
     print(f"  Game generated {len(data)} positions")
 
     replay = ReplayBuffer(1000)

@@ -7,4 +7,5 @@ dependencies = [
     "python-chess>=1.999",
     "numpy>=1.24.0",
     "tqdm>=4.65.0",
+    "zstandard>=0.21.0",
 ]
