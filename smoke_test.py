@@ -91,8 +91,8 @@ def test_self_play_and_train():
     replay.push(data)
 
     if len(replay) >= config.batch_size:
-        loss = train_network(net, replay, config)
-        print(f"  Training loss: {loss:.4f}")
+        loss_dict = train_network(net, replay, config)
+        print(f"  Training loss: {loss_dict['loss']:.4f}")
     else:
         print(f"  Skipped training (only {len(replay)} samples, need {config.batch_size})")
     print()

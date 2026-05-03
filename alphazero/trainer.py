@@ -39,7 +39,7 @@ class ChessDataset(Dataset):
 
 def train_network(network, replay_buffer: ReplayBuffer, config: AlphaZeroConfig):
     if len(replay_buffer) < config.batch_size:
-        return 0.0
+        return {"loss": 0.0, "policy_loss": 0.0, "value_loss": 0.0}
 
     network.train()
     optimizer = torch.optim.Adam(
@@ -52,6 +52,8 @@ def train_network(network, replay_buffer: ReplayBuffer, config: AlphaZeroConfig)
     loader = DataLoader(dataset, batch_size=config.batch_size, shuffle=True, drop_last=True)
 
     total_loss = 0.0
+    total_ploss = 0.0
+    total_vloss = 0.0
     num_batches = 0
 
     for epoch in range(config.num_epochs):
@@ -63,10 +65,8 @@ def train_network(network, replay_buffer: ReplayBuffer, config: AlphaZeroConfig)
             policy_logits, pred_vs = network(states)
 
             value_loss = F.mse_loss(pred_vs, target_vs)
-
             log_probs = F.log_softmax(policy_logits, dim=-1)
             policy_loss = -(target_pis * log_probs).sum(dim=-1).mean()
-
             loss = value_loss + policy_loss
 
             optimizer.zero_grad()
@@ -74,6 +74,13 @@ def train_network(network, replay_buffer: ReplayBuffer, config: AlphaZeroConfig)
             optimizer.step()
 
             total_loss += loss.item()
+            total_ploss += policy_loss.item()
+            total_vloss += value_loss.item()
             num_batches += 1
 
-    return total_loss / max(num_batches, 1)
+    n = max(num_batches, 1)
+    return {
+        "loss": total_loss / n,
+        "policy_loss": total_ploss / n,
+        "value_loss": total_vloss / n,
+    }

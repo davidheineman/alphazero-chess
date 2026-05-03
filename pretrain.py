@@ -14,6 +14,8 @@ import zstandard as zstd
 from torch.utils.data import DataLoader
 from tqdm import tqdm
 
+import wandb
+
 from alphazero.config import AlphaZeroConfig
 from alphazero.encode import encode_board, move_to_action, ACTION_SPACE
 from alphazero.network import AlphaZeroNet
@@ -109,6 +111,7 @@ def pretrain(network, data, config: AlphaZeroConfig, epochs: int = 5, lr: float 
 
     dataset = ChessDataset(data)
     loader = DataLoader(dataset, batch_size=config.batch_size, shuffle=True, drop_last=True)
+    global_step = 0
 
     for epoch in range(epochs):
         total_loss = 0.0
@@ -137,9 +140,25 @@ def pretrain(network, data, config: AlphaZeroConfig, epochs: int = 5, lr: float 
             total_ploss += policy_loss.item()
             total_vloss += value_loss.item()
             n += 1
+            global_step += 1
             pbar.set_postfix(loss=f"{total_loss/n:.3f}", p=f"{total_ploss/n:.3f}", v=f"{total_vloss/n:.3f}")
 
+            if global_step % 50 == 0:
+                wandb.log({
+                    "pretrain/loss": loss.item(),
+                    "pretrain/policy_loss": policy_loss.item(),
+                    "pretrain/value_loss": value_loss.item(),
+                    "pretrain/step": global_step,
+                })
+
         scheduler.step()
+        wandb.log({
+            "pretrain/epoch": epoch + 1,
+            "pretrain/epoch_loss": total_loss / n,
+            "pretrain/epoch_policy_loss": total_ploss / n,
+            "pretrain/epoch_value_loss": total_vloss / n,
+            "pretrain/lr": scheduler.get_last_lr()[0],
+        })
         print(f"  Epoch {epoch+1}: loss={total_loss/n:.4f} policy={total_ploss/n:.4f} value={total_vloss/n:.4f}")
 
 
@@ -156,6 +175,8 @@ def main():
     p.add_argument("--res-blocks", type=int, default=10)
     p.add_argument("--channels", type=int, default=128)
     p.add_argument("--output", type=str, default="checkpoints/pretrained.pt")
+    p.add_argument("--wandb-project", type=str, default="mcts")
+    p.add_argument("--wandb-entity", type=str, default="bobcrables")
     args = p.parse_args()
 
     config = AlphaZeroConfig(
@@ -191,11 +212,30 @@ def main():
     print(f"\nNetwork: {param_count:,} parameters")
     print(f"Training for {args.epochs} epochs...\n")
 
+    wandb.init(
+        project=args.wandb_project,
+        entity=args.wandb_entity,
+        config={
+            "stage": "pretrain",
+            "num_res_blocks": args.res_blocks,
+            "num_channels": args.channels,
+            "epochs": args.epochs,
+            "batch_size": args.batch_size,
+            "lr": args.lr,
+            "max_positions": args.max_positions,
+            "min_elo": args.min_elo,
+            "parameters": param_count,
+            "num_positions": len(data),
+            "num_games": games_seen,
+        },
+        name=f"pretrain-{args.res_blocks}b{args.channels}c-{len(data)//1000}k",
+    )
+
     pretrain(network, data, config, epochs=args.epochs, lr=args.lr)
 
-    # Save
     os.makedirs(os.path.dirname(args.output), exist_ok=True)
     torch.save(network.state_dict(), args.output)
+    wandb.finish()
     print(f"\nSaved pretrained model to {args.output}")
 
 
