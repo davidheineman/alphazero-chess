@@ -17,9 +17,10 @@ VIRTUAL_LOSS = 3.0
 class MCTSNode:
     __slots__ = ("board", "parent", "action", "children",
                  "visit_count", "value_sum", "prior", "is_expanded",
-                 "virtual_loss_count")
+                 "virtual_loss_count", "_move", "_parent_board")
 
-    def __init__(self, board: chess.Board, parent=None, action: int = -1, prior: float = 0.0):
+    def __init__(self, board: chess.Board = None, parent=None, action: int = -1,
+                 prior: float = 0.0, move: chess.Move = None, parent_board: chess.Board = None):
         self.board = board
         self.parent = parent
         self.action = action
@@ -29,6 +30,16 @@ class MCTSNode:
         self.value_sum = 0.0
         self.is_expanded = False
         self.virtual_loss_count = 0
+        # For lazy board creation
+        self._move = move
+        self._parent_board = parent_board
+
+    def ensure_board(self):
+        if self.board is None and self._parent_board is not None:
+            self.board = self._parent_board.copy(stack=False)
+            self.board.push(self._move)
+            self._parent_board = None
+            self._move = None
 
     @property
     def q_value(self) -> float:
@@ -37,19 +48,27 @@ class MCTSNode:
             return 0.0
         return (self.value_sum - self.virtual_loss_count * VIRTUAL_LOSS) / total_visits
 
-    def ucb_score(self, c_puct: float) -> float:
-        parent_visits = self.parent.visit_count + self.parent.virtual_loss_count if self.parent else 1
+    def ucb_score(self, c_puct: float, parent_visits: int) -> float:
         total_visits = self.visit_count + self.virtual_loss_count
         exploration = c_puct * self.prior * math.sqrt(parent_visits) / (1 + total_visits)
         return self.q_value + exploration
 
     def best_child(self, c_puct: float) -> "MCTSNode":
-        return max(self.children, key=lambda c: c.ucb_score(c_puct))
+        pv = self.visit_count + self.virtual_loss_count
+        best = None
+        best_score = -1e9
+        for c in self.children:
+            s = c.ucb_score(c_puct, pv)
+            if s > best_score:
+                best_score = s
+                best = c
+        return best
 
     def select_leaf(self, c_puct: float) -> "MCTSNode":
         node = self
         while node.is_expanded and node.children:
             node = node.best_child(c_puct)
+        node.ensure_board()
         return node
 
     def expand(self, policy: np.ndarray):
@@ -64,9 +83,10 @@ class MCTSNode:
 
         for move in self.board.legal_moves:
             action = move_to_action(move, self.board)
-            child_board = self.board.copy(stack=False)
-            child_board.push(move)
-            child = MCTSNode(child_board, parent=self, action=action, prior=masked[action])
+            child = MCTSNode(
+                parent=self, action=action, prior=masked[action],
+                move=move, parent_board=self.board,
+            )
             self.children.append(child)
 
     def add_virtual_loss(self):
@@ -115,7 +135,7 @@ def run_mcts(
     add_noise: bool = True,
 ) -> tuple[np.ndarray, MCTSNode]:
     network.eval()
-    root = MCTSNode(board.copy(stack=False))
+    root = MCTSNode(board=board.copy(stack=False))
 
     root_boards = np.expand_dims(encode_board(board), 0)
     root_tensor = torch.from_numpy(root_boards).to(config.device)
@@ -132,7 +152,6 @@ def run_mcts(
         leaves = []
         terminal_leaves = []
 
-        # Select multiple leaves using virtual loss to diversify
         for _ in range(batch_sz):
             leaf = root.select_leaf(config.c_puct)
 

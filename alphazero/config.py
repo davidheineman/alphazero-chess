@@ -9,7 +9,7 @@ class AlphaZeroConfig:
 
     # --- MCTS ---
     num_simulations: int = 100
-    mcts_batch_size: int = 32
+    mcts_batch_size: int = 64
     c_puct: float = 1.25
     dirichlet_alpha: float = 0.3
     dirichlet_epsilon: float = 0.25
