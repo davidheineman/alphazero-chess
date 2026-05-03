@@ -18,7 +18,7 @@ train:
 
 eval:
   games: 4
-  simulations: 200
+  simulations: 50
 
 run:
   iterations: 40
@@ -26,7 +26,7 @@ run:
 stockfish:
   games: 4
   max_skill: 5
-  every_n_iters: 10
+  every_n_iters: 5
 
 pretrain:
   max_positions: 300000

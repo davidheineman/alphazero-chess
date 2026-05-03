@@ -77,11 +77,8 @@ def main():
         tr_time = time.time() - t0
         print(f"  Train: loss={losses['loss']:.4f} (p={losses['policy_loss']:.4f} v={losses['value_loss']:.4f}) {tr_time:.1f}s")
 
-        # Eval (tracking only)
-        t0 = time.time()
-        win_rate, w, d, l = evaluate(network, best_net, cfg, device)
-        ev_time = time.time() - t0
-        print(f"  Eval: W={w} D={d} L={l} (win_rate={win_rate:.1%}) {ev_time:.1f}s")
+        # Skip slow self-eval, use Stockfish as the real benchmark
+        win_rate, w, d, l, ev_time = 0.5, 0, 0, 0, 0.0
 
         best_net = copy.deepcopy(network)
         torch.save(network.state_dict(), f"{ckpt_dir}/best.pt")
@@ -111,8 +108,10 @@ def main():
         if sf.get("enabled", False) and iteration % sf.get("every_n_iters", 5) == 0:
             t0 = time.time()
             print(f"  Stockfish ELO sweep:")
+            from omegaconf import OmegaConf
+            sf_cfg = OmegaConf.merge(cfg, {"mcts": {"simulations": 50, "batch_size": 25}})
             elo_result = estimate_elo(
-                network, cfg, device,
+                network, sf_cfg, device,
                 games_per_level=sf.get("games", 4),
                 stockfish_path=sf.get("path", "stockfish"),
                 move_time=sf.get("move_time", 0.01),
