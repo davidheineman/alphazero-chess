@@ -3,22 +3,22 @@ network:
   channels: 96
 
 mcts:
-  simulations: 50
-  batch_size: 32
+  simulations: 400
+  batch_size: 64
 
 self_play:
-  games: 20
-  max_moves: 100
-  parallel_games: 5
-  num_workers: 8
+  games: 40
+  max_moves: 120
+  parallel_games: 10
+  num_workers: 12
 
 train:
-  epochs: 8
+  epochs: 5
   batch_size: 512
 
 eval:
   games: 4
-  simulations: 25
+  simulations: 200
 
 run:
   iterations: 40

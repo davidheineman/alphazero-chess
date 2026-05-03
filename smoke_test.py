@@ -37,14 +37,17 @@ def test_network():
 
 
 def test_mcts():
-    print("--- MCTS ---")
-    cfg = load_config("mcts.simulations=20", "mcts.batch_size=10")
+    print("--- MCTS (C++) ---")
+    cfg = load_config("mcts.simulations=50", "mcts.batch_size=25")
     net = AlphaZeroNet(cfg.network.res_blocks, cfg.network.channels)
-    board = chess.Board()
 
-    probs, root = run_mcts(board, net, cfg, "cpu", add_noise=True)
+    probs = run_mcts(chess.STARTING_FEN, net, cfg, "cpu", add_noise=True)
     assert probs.shape == (ACTION_SPACE,)
-    move = action_to_move(select_action(probs, 1.0), board)
+    assert abs(probs.sum() - 1.0) < 1e-5
+
+    board = chess.Board()
+    action = select_action(probs, 1.0)
+    move = action_to_move(action, board)
     assert move in board.legal_moves
     print(f"  OK (selected {move.uci()})")
 
@@ -52,8 +55,8 @@ def test_mcts():
 def test_self_play_and_train():
     print("--- Self-play + Train ---")
     cfg = load_config(
-        "mcts.simulations=10", "mcts.batch_size=10",
-        "self_play.games=1", "self_play.max_moves=20", "self_play.parallel_games=1",
+        "mcts.simulations=20", "mcts.batch_size=10",
+        "self_play.games=2", "self_play.max_moves=30", "self_play.num_workers=1",
         "train.epochs=1", "train.batch_size=8",
     )
     net = AlphaZeroNet(cfg.network.res_blocks, cfg.network.channels)
@@ -62,15 +65,14 @@ def test_self_play_and_train():
     data = run_self_play(net, cfg, "cpu")
     print(f"  Generated {len(data)} positions")
 
-    replay = ReplayBuffer(1000)
-    replay.push(data)
-
-    if len(replay) >= cfg.train.batch_size:
+    if len(data) >= cfg.train.batch_size:
         opt = torch.optim.Adam(net.parameters(), lr=cfg.train.lr)
-        result = train_network(net, opt, replay, cfg, "cpu")
+        result = train_network(net, opt, ReplayBuffer(1000), cfg, "cpu")
+        # push data first
+        buf = ReplayBuffer(1000)
+        buf.push(data)
+        result = train_network(net, opt, buf, cfg, "cpu")
         print(f"  Loss: {result['loss']:.4f}")
-    else:
-        print(f"  Skipped training ({len(replay)} < {cfg.train.batch_size})")
     print("  OK")
 
 

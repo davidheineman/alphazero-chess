@@ -1,5 +1,5 @@
 import chess
-from omegaconf import DictConfig
+from omegaconf import OmegaConf, DictConfig
 from tqdm import trange
 
 from .encode import action_to_move, move_to_action
@@ -10,9 +10,11 @@ def play_match(white_net, black_net, cfg: DictConfig, device: str) -> float:
     board = chess.Board()
     move_count = 0
 
+    eval_cfg = OmegaConf.merge(cfg, {"mcts": {"simulations": cfg.eval.simulations}})
+
     while not board.is_game_over(claim_draw=True) and move_count < cfg.self_play.max_moves:
         net = white_net if board.turn == chess.WHITE else black_net
-        action_probs, _ = run_mcts(board, net, cfg, device, add_noise=False)
+        action_probs = run_mcts(board.fen(), net, eval_cfg, device, add_noise=False)
         action = select_action(action_probs, temperature=cfg.eval.temperature)
 
         move = action_to_move(action, board)
@@ -36,16 +38,12 @@ def evaluate(new_net, old_net, cfg: DictConfig, device: str) -> tuple[float, int
     wins, draws, losses = 0, 0, 0
     half = cfg.eval.games // 2
 
-    # Use eval simulations instead of full simulations
-    from omegaconf import OmegaConf
-    eval_cfg = OmegaConf.merge(cfg, {"mcts": {"simulations": cfg.eval.simulations}})
-
     for i in trange(cfg.eval.games, desc="Evaluation"):
         if i < half:
-            r = play_match(new_net, old_net, eval_cfg, device)
+            r = play_match(new_net, old_net, cfg, device)
             wins += r > 0; draws += r == 0; losses += r < 0
         else:
-            r = play_match(old_net, new_net, eval_cfg, device)
+            r = play_match(old_net, new_net, cfg, device)
             wins += r < 0; draws += r == 0; losses += r > 0
 
     total = wins + draws + losses
