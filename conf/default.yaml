@@ -27,6 +27,14 @@ eval:
   simulations: 50
   temperature: 0.1
 
+stockfish:
+  enabled: true
+  path: stockfish
+  games: 6
+  skill_level: 1
+  move_time: 0.01
+  every_n_iters: 5
+
 run:
   iterations: 100
   checkpoint_dir: checkpoints

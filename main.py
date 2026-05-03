@@ -11,6 +11,7 @@ from alphazero.network import AlphaZeroNet
 from alphazero.self_play import run_self_play
 from alphazero.trainer import ReplayBuffer, train_network
 from alphazero.arena import evaluate
+from alphazero.stockfish_eval import eval_vs_stockfish
 
 
 def get_device() -> str:
@@ -81,7 +82,7 @@ def main():
         torch.save(network.state_dict(), f"{ckpt_dir}/best.pt")
         torch.save(network.state_dict(), f"{ckpt_dir}/iter_{iteration:04d}.pt")
 
-        wandb.log({
+        log_data = {
             "iteration": iteration,
             "self_play/positions": len(new_data),
             "self_play/avg_game_length": avg_len,
@@ -96,7 +97,31 @@ def main():
             "eval/draws": d,
             "eval/losses": l,
             "eval/time_s": ev_time,
-        })
+        }
+
+        # Stockfish eval
+        sf = cfg.get("stockfish", {})
+        if sf.get("enabled", False) and iteration % sf.get("every_n_iters", 5) == 0:
+            t0 = time.time()
+            sf_result = eval_vs_stockfish(
+                network, cfg, device,
+                num_games=sf.games, skill_level=sf.skill_level,
+                stockfish_path=sf.path, move_time=sf.move_time,
+            )
+            sf_time = time.time() - t0
+            print(f"  Stockfish (skill={sf_result['skill_level']}, ~{sf_result['elo_estimate']} ELO): "
+                  f"W={sf_result['wins']} D={sf_result['draws']} L={sf_result['losses']} "
+                  f"(win_rate={sf_result['win_rate']:.1%}) {sf_time:.1f}s")
+            log_data.update({
+                "stockfish/win_rate": sf_result["win_rate"],
+                "stockfish/wins": sf_result["wins"],
+                "stockfish/draws": sf_result["draws"],
+                "stockfish/losses": sf_result["losses"],
+                "stockfish/elo_estimate": sf_result["elo_estimate"],
+                "stockfish/time_s": sf_time,
+            })
+
+        wandb.log(log_data)
         print()
 
     wandb.finish()
