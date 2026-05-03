@@ -1,0 +1,10 @@
+[project]
+name = "alphazero-chess"
+version = "0.1.0"
+requires-python = ">=3.11"
+dependencies = [
+    "torch>=2.0.0",
+    "python-chess>=1.999",
+    "numpy>=1.24.0",
+    "tqdm>=4.65.0",
+]
