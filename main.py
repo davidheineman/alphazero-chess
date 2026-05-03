@@ -23,8 +23,7 @@ def get_device() -> str:
 
 
 def main():
-    config_files = [a for a in sys.argv[1:] if a.endswith((".yaml", ".yml")) and not a.startswith("-")]
-    cfg = load_config(*config_files)
+    cfg = load_config(*sys.argv[1:])
     device = get_device()
 
     print(f"Device: {device}")
@@ -107,15 +106,16 @@ def main():
         sf = cfg.get("stockfish", {})
         if sf.get("enabled", False) and iteration % sf.get("every_n_iters", 5) == 0:
             t0 = time.time()
-            print(f"  Stockfish ELO sweep:")
-            from omegaconf import OmegaConf
-            sf_cfg = OmegaConf.merge(cfg, {"mcts": {"simulations": 50, "batch_size": 25}})
+            sf_cfg = OmegaConf.merge(cfg, {
+                "mcts": {"simulations": 50, "batch_size": 25},
+                "self_play": {"max_moves": 60},
+            })
             elo_result = estimate_elo(
                 network, sf_cfg, device,
-                games_per_level=sf.get("games", 4),
+                games_per_level=sf.get("games", 2),
                 stockfish_path=sf.get("path", "stockfish"),
                 move_time=sf.get("move_time", 0.01),
-                max_skill=sf.get("max_skill", 5),
+                max_skill=sf.get("max_skill", 3),
             )
             sf_time = time.time() - t0
             print(f"  Estimated ELO: {elo_result['estimated_elo']} ({sf_time:.1f}s)")

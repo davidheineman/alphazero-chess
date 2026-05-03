@@ -138,8 +138,7 @@ def get_device() -> str:
 
 
 def main():
-    config_files = [a for a in sys.argv[1:] if a.endswith((".yaml", ".yml")) and not a.startswith("-")]
-    cfg = load_config(*config_files)
+    cfg = load_config(*sys.argv[1:])
     device = get_device()
 
     print(f"Device: {device}")
