@@ -1,9 +1,8 @@
 import numpy as np
 import torch
 import torch.nn.functional as F
+from omegaconf import DictConfig
 from torch.utils.data import Dataset, DataLoader
-
-from .config import AlphaZeroConfig
 
 
 class ReplayBuffer:
@@ -37,30 +36,30 @@ class ChessDataset(Dataset):
         )
 
 
-def train_network(network, replay_buffer: ReplayBuffer, config: AlphaZeroConfig):
-    if len(replay_buffer) < config.batch_size:
+def train_network(network, replay_buffer: ReplayBuffer, cfg: DictConfig, device: str):
+    if len(replay_buffer) < cfg.train.batch_size:
         return {"loss": 0.0, "policy_loss": 0.0, "value_loss": 0.0}
 
     network.train()
     optimizer = torch.optim.Adam(
         network.parameters(),
-        lr=config.learning_rate,
-        weight_decay=config.weight_decay,
+        lr=cfg.train.lr,
+        weight_decay=cfg.train.weight_decay,
     )
 
     dataset = ChessDataset(replay_buffer.buffer)
-    loader = DataLoader(dataset, batch_size=config.batch_size, shuffle=True, drop_last=True)
+    loader = DataLoader(dataset, batch_size=cfg.train.batch_size, shuffle=True, drop_last=True)
 
     total_loss = 0.0
     total_ploss = 0.0
     total_vloss = 0.0
-    num_batches = 0
+    n = 0
 
-    for epoch in range(config.num_epochs):
+    for epoch in range(cfg.train.epochs):
         for states, target_pis, target_vs in loader:
-            states = states.to(config.device)
-            target_pis = target_pis.to(config.device)
-            target_vs = target_vs.to(config.device)
+            states = states.to(device)
+            target_pis = target_pis.to(device)
+            target_vs = target_vs.to(device)
 
             policy_logits, pred_vs = network(states)
 
@@ -76,9 +75,9 @@ def train_network(network, replay_buffer: ReplayBuffer, config: AlphaZeroConfig)
             total_loss += loss.item()
             total_ploss += policy_loss.item()
             total_vloss += value_loss.item()
-            num_batches += 1
+            n += 1
 
-    n = max(num_batches, 1)
+    n = max(n, 1)
     return {
         "loss": total_loss / n,
         "policy_loss": total_ploss / n,

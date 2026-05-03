@@ -1,0 +1,27 @@
+network:
+  res_blocks: 6
+  channels: 96
+
+mcts:
+  simulations: 100
+  batch_size: 64
+
+self_play:
+  games: 30
+  max_moves: 120
+  parallel_games: 30
+
+train:
+  epochs: 8
+  batch_size: 128
+
+eval:
+  games: 6
+  simulations: 30
+
+run:
+  iterations: 25
+
+pretrain:
+  max_positions: 300000
+  epochs: 3

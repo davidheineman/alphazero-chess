@@ -1,36 +1,25 @@
-from dataclasses import dataclass
+from pathlib import Path
+from omegaconf import OmegaConf, DictConfig
+
+DEFAULT_CONF = Path(__file__).parent.parent / "conf" / "default.yaml"
 
 
-@dataclass
-class AlphaZeroConfig:
-    # --- Network ---
-    num_res_blocks: int = 5
-    num_channels: int = 64
+def load_config(*overrides: str, base: str = None) -> DictConfig:
+    base_path = base or str(DEFAULT_CONF)
+    cfg = OmegaConf.load(base_path)
 
-    # --- MCTS ---
-    num_simulations: int = 100
-    mcts_batch_size: int = 64
-    c_puct: float = 1.25
-    dirichlet_alpha: float = 0.3
-    dirichlet_epsilon: float = 0.25
+    files = []
+    dotlist = []
+    for o in overrides:
+        if "=" in o and not o.endswith((".yaml", ".yml")):
+            dotlist.append(o)
+        else:
+            files.append(o)
 
-    # --- Self-play ---
-    num_self_play_games: int = 25
-    max_moves: int = 150
-    temp_threshold: int = 30
+    for path in files:
+        cfg = OmegaConf.merge(cfg, OmegaConf.load(path))
 
-    # --- Training ---
-    num_epochs: int = 10
-    batch_size: int = 64
-    learning_rate: float = 0.001
-    weight_decay: float = 1e-4
-    replay_buffer_size: int = 50_000
+    if dotlist:
+        cfg = OmegaConf.merge(cfg, OmegaConf.from_dotlist(dotlist))
 
-    # --- Evaluation ---
-    num_eval_games: int = 10
-    eval_simulations: int = 50
-    win_threshold: float = 0.55
-
-    # --- System ---
-    num_iterations: int = 50
-    device: str = "cpu"
+    return cfg

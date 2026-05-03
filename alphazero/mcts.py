@@ -2,6 +2,7 @@ import math
 import chess
 import numpy as np
 import torch
+from omegaconf import DictConfig
 
 from .encode import (
     encode_board,
@@ -9,7 +10,6 @@ from .encode import (
     move_to_action,
     ACTION_SPACE,
 )
-from .config import AlphaZeroConfig
 
 VIRTUAL_LOSS = 3.0
 
@@ -30,7 +30,6 @@ class MCTSNode:
         self.value_sum = 0.0
         self.is_expanded = False
         self.virtual_loss_count = 0
-        # For lazy board creation
         self._move = move
         self._parent_board = parent_board
 
@@ -127,43 +126,50 @@ def _batch_evaluate(leaves: list[MCTSNode], network: torch.nn.Module, device: st
     return policies, values
 
 
+def _terminal_value(board: chess.Board) -> float:
+    result = board.result()
+    if result == "1-0":
+        return 1.0 if board.turn == chess.BLACK else -1.0
+    elif result == "0-1":
+        return 1.0 if board.turn == chess.WHITE else -1.0
+    return 0.0
+
+
 @torch.no_grad()
 def run_mcts(
     board: chess.Board,
     network: torch.nn.Module,
-    config: AlphaZeroConfig,
+    cfg: DictConfig,
+    device: str,
     add_noise: bool = True,
 ) -> tuple[np.ndarray, MCTSNode]:
     network.eval()
     root = MCTSNode(board=board.copy(stack=False))
 
     root_boards = np.expand_dims(encode_board(board), 0)
-    root_tensor = torch.from_numpy(root_boards).to(config.device)
+    root_tensor = torch.from_numpy(root_boards).to(device)
     policy_logits, _ = network(root_tensor)
     policy = torch.softmax(policy_logits, dim=-1).cpu().numpy().flatten()
     root.expand(policy)
 
     if add_noise:
-        add_dirichlet_noise(root, config.dirichlet_alpha, config.dirichlet_epsilon)
+        add_dirichlet_noise(root, cfg.mcts.dirichlet_alpha, cfg.mcts.dirichlet_epsilon)
 
     sims_done = 0
-    while sims_done < config.num_simulations:
-        batch_sz = min(config.mcts_batch_size, config.num_simulations - sims_done)
+    num_sims = cfg.mcts.simulations
+    batch_sz = cfg.mcts.batch_size
+    c_puct = cfg.mcts.c_puct
+
+    while sims_done < num_sims:
+        cur_batch = min(batch_sz, num_sims - sims_done)
         leaves = []
         terminal_leaves = []
 
-        for _ in range(batch_sz):
-            leaf = root.select_leaf(config.c_puct)
+        for _ in range(cur_batch):
+            leaf = root.select_leaf(c_puct)
 
             if leaf.board.is_game_over():
-                result = leaf.board.result()
-                if result == "1-0":
-                    v = 1.0 if leaf.board.turn == chess.BLACK else -1.0
-                elif result == "0-1":
-                    v = 1.0 if leaf.board.turn == chess.WHITE else -1.0
-                else:
-                    v = 0.0
-                terminal_leaves.append((leaf, v))
+                terminal_leaves.append((leaf, _terminal_value(leaf.board)))
             else:
                 leaf.add_virtual_loss()
                 leaves.append(leaf)
@@ -173,7 +179,7 @@ def run_mcts(
             sims_done += 1
 
         if leaves:
-            policies, values = _batch_evaluate(leaves, network, config.device)
+            policies, values = _batch_evaluate(leaves, network, device)
             for i, leaf in enumerate(leaves):
                 leaf.revert_virtual_loss()
                 leaf.expand(policies[i])

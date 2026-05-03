@@ -1,0 +1,45 @@
+network:
+  res_blocks: 10
+  channels: 128
+
+mcts:
+  simulations: 100
+  batch_size: 64
+  c_puct: 1.25
+  dirichlet_alpha: 0.3
+  dirichlet_epsilon: 0.25
+
+self_play:
+  games: 50
+  max_moves: 150
+  temp_threshold: 30
+  parallel_games: 32
+
+train:
+  epochs: 10
+  batch_size: 128
+  lr: 0.001
+  weight_decay: 1e-4
+  replay_buffer_size: 50000
+
+eval:
+  games: 10
+  simulations: 50
+  temperature: 0.1
+
+run:
+  iterations: 100
+  checkpoint_dir: checkpoints
+  pretrain_path: null
+
+wandb:
+  project: mcts
+  entity: bobcrables
+
+pretrain:
+  url: "https://database.lichess.org/standard/lichess_db_standard_rated_2013-01.pgn.zst"
+  max_positions: 500000
+  min_elo: 1500
+  sample_rate: 0.25
+  epochs: 5
+  lr: 0.001

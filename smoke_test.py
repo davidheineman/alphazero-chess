@@ -2,7 +2,7 @@ import chess
 import torch
 import numpy as np
 
-from alphazero.config import AlphaZeroConfig
+from alphazero.config import load_config
 from alphazero.encode import encode_board, encode_board_tensor, get_legal_move_mask, move_to_action, action_to_move, ACTION_SPACE
 from alphazero.network import AlphaZeroNet
 from alphazero.mcts import run_mcts, select_action
@@ -10,92 +10,67 @@ from alphazero.trainer import ReplayBuffer, train_network
 
 
 def test_encoding():
-    print("--- Board encoding ---")
+    print("--- Encoding ---")
     board = chess.Board()
     planes = encode_board(board)
-    assert planes.shape == (19, 8, 8), f"Bad shape: {planes.shape}"
-    print(f"  Board planes shape: {planes.shape}")
-
-    tensor = encode_board_tensor(board)
-    assert tensor.shape == (1, 19, 8, 8)
-    print(f"  Tensor shape: {tensor.shape}")
+    assert planes.shape == (19, 8, 8)
 
     mask = get_legal_move_mask(board)
-    legal_count = int(mask.sum())
-    assert legal_count == 20, f"Expected 20 legal moves at start, got {legal_count}"
-    print(f"  Legal moves at start: {legal_count}")
+    assert int(mask.sum()) == 20
 
-    # Round-trip test for all legal moves
     for move in board.legal_moves:
         action = move_to_action(move, board)
         recovered = action_to_move(action, board)
-        assert move == recovered, f"Round-trip failed: {move} -> {action} -> {recovered}"
-    print(f"  All {legal_count} moves round-trip OK")
-    print()
+        assert move == recovered, f"{move} -> {action} -> {recovered}"
+    print("  OK")
 
 
 def test_network():
     print("--- Network ---")
-    config = AlphaZeroConfig(num_res_blocks=2, num_channels=32)
-    net = AlphaZeroNet(config.num_res_blocks, config.num_channels)
-    param_count = sum(p.numel() for p in net.parameters())
-    print(f"  Parameters (small net): {param_count:,}")
-
-    board = chess.Board()
-    x = encode_board_tensor(board)
-    policy_logits, value = net(x)
-    assert policy_logits.shape == (1, ACTION_SPACE)
+    cfg = load_config()
+    net = AlphaZeroNet(cfg.network.res_blocks, cfg.network.channels)
+    x = encode_board_tensor(chess.Board())
+    logits, value = net(x)
+    assert logits.shape == (1, ACTION_SPACE)
     assert value.shape == (1,)
-    print(f"  Policy logits shape: {policy_logits.shape}")
-    print(f"  Value: {value.item():.4f}")
-    print()
+    print(f"  OK ({sum(p.numel() for p in net.parameters()):,} params)")
 
 
 def test_mcts():
     print("--- MCTS ---")
-    config = AlphaZeroConfig(num_res_blocks=2, num_channels=32, num_simulations=20)
-    net = AlphaZeroNet(config.num_res_blocks, config.num_channels)
+    cfg = load_config("mcts.simulations=20", "mcts.batch_size=10")
+    net = AlphaZeroNet(cfg.network.res_blocks, cfg.network.channels)
     board = chess.Board()
 
-    action_probs, root = run_mcts(board, net, config, add_noise=True)
-    assert action_probs.shape == (ACTION_SPACE,)
-    total_visits = sum(c.visit_count for c in root.children)
-    print(f"  Total root visit counts: {total_visits}")
-    print(f"  Root children: {len(root.children)}")
-
-    action = select_action(action_probs, temperature=1.0)
-    move = action_to_move(action, board)
-    print(f"  Selected move: {move.uci()}")
+    probs, root = run_mcts(board, net, cfg, "cpu", add_noise=True)
+    assert probs.shape == (ACTION_SPACE,)
+    move = action_to_move(select_action(probs, 1.0), board)
     assert move in board.legal_moves
-    print()
+    print(f"  OK (selected {move.uci()})")
 
 
 def test_self_play_and_train():
-    print("--- Self-play + Training (1 short game) ---")
-    config = AlphaZeroConfig(
-        num_res_blocks=2,
-        num_channels=32,
-        num_simulations=10,
-        num_self_play_games=1,
-        num_epochs=1,
-        batch_size=8,
-        temp_threshold=5,
+    print("--- Self-play + Train ---")
+    cfg = load_config(
+        "mcts.simulations=10", "mcts.batch_size=10",
+        "self_play.games=1", "self_play.max_moves=20", "self_play.parallel_games=1",
+        "train.epochs=1", "train.batch_size=8",
     )
-    net = AlphaZeroNet(config.num_res_blocks, config.num_channels).to(config.device)
+    net = AlphaZeroNet(cfg.network.res_blocks, cfg.network.channels)
 
     from alphazero.self_play import run_self_play
-    data = run_self_play(net, config)
-    print(f"  Game generated {len(data)} positions")
+    data = run_self_play(net, cfg, "cpu")
+    print(f"  Generated {len(data)} positions")
 
     replay = ReplayBuffer(1000)
     replay.push(data)
 
-    if len(replay) >= config.batch_size:
-        loss_dict = train_network(net, replay, config)
-        print(f"  Training loss: {loss_dict['loss']:.4f}")
+    if len(replay) >= cfg.train.batch_size:
+        result = train_network(net, replay, cfg, "cpu")
+        print(f"  Loss: {result['loss']:.4f}")
     else:
-        print(f"  Skipped training (only {len(replay)} samples, need {config.batch_size})")
-    print()
+        print(f"  Skipped training ({len(replay)} < {cfg.train.batch_size})")
+    print("  OK")
 
 
 if __name__ == "__main__":
@@ -103,4 +78,4 @@ if __name__ == "__main__":
     test_network()
     test_mcts()
     test_self_play_and_train()
-    print("All smoke tests passed!")
+    print("\nAll tests passed!")
