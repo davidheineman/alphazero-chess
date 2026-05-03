@@ -51,6 +51,11 @@ def main():
         name=f"az-{cfg.network.res_blocks}b{cfg.network.channels}c-{cfg.mcts.simulations}s",
     )
 
+    optimizer = torch.optim.Adam(
+        network.parameters(),
+        lr=cfg.train.lr,
+        weight_decay=cfg.train.weight_decay,
+    )
     best_net = copy.deepcopy(network)
 
     for iteration in range(1, cfg.run.iterations + 1):
@@ -68,7 +73,7 @@ def main():
 
         # Train
         t0 = time.time()
-        losses = train_network(network, replay_buffer, cfg, device)
+        losses = train_network(network, optimizer, replay_buffer, cfg, device)
         tr_time = time.time() - t0
         print(f"  Train: loss={losses['loss']:.4f} (p={losses['policy_loss']:.4f} v={losses['value_loss']:.4f}) {tr_time:.1f}s")
 
@@ -91,6 +96,8 @@ def main():
             "train/loss": losses["loss"],
             "train/policy_loss": losses["policy_loss"],
             "train/value_loss": losses["value_loss"],
+            "train/lr": losses["lr"],
+            "train/grad_steps": losses["grad_steps"],
             "train/time_s": tr_time,
             "eval/win_rate": win_rate,
             "eval/wins": w,

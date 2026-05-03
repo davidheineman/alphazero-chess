@@ -9,12 +9,12 @@ mcts:
 self_play:
   games: 20
   max_moves: 100
-  parallel_games: 10
-  num_workers: 4
+  parallel_games: 5
+  num_workers: 8
 
 train:
   epochs: 8
-  batch_size: 128
+  batch_size: 512
 
 eval:
   games: 4
@@ -25,6 +25,7 @@ run:
 
 stockfish:
   games: 4
+  skill_level: 0
   every_n_iters: 10
 
 pretrain:

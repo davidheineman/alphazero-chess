@@ -66,7 +66,8 @@ def test_self_play_and_train():
     replay.push(data)
 
     if len(replay) >= cfg.train.batch_size:
-        result = train_network(net, replay, cfg, "cpu")
+        opt = torch.optim.Adam(net.parameters(), lr=cfg.train.lr)
+        result = train_network(net, opt, replay, cfg, "cpu")
         print(f"  Loss: {result['loss']:.4f}")
     else:
         print(f"  Skipped training ({len(replay)} < {cfg.train.batch_size})")

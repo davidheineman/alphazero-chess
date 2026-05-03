@@ -36,16 +36,11 @@ class ChessDataset(Dataset):
         )
 
 
-def train_network(network, replay_buffer: ReplayBuffer, cfg: DictConfig, device: str):
+def train_network(network, optimizer, replay_buffer: ReplayBuffer, cfg: DictConfig, device: str):
     if len(replay_buffer) < cfg.train.batch_size:
-        return {"loss": 0.0, "policy_loss": 0.0, "value_loss": 0.0}
+        return {"loss": 0.0, "policy_loss": 0.0, "value_loss": 0.0, "lr": cfg.train.lr, "grad_steps": 0}
 
     network.train()
-    optimizer = torch.optim.Adam(
-        network.parameters(),
-        lr=cfg.train.lr,
-        weight_decay=cfg.train.weight_decay,
-    )
 
     dataset = ChessDataset(replay_buffer.buffer)
     loader = DataLoader(dataset, batch_size=cfg.train.batch_size, shuffle=True, drop_last=True)
@@ -82,4 +77,6 @@ def train_network(network, replay_buffer: ReplayBuffer, cfg: DictConfig, device:
         "loss": total_loss / n,
         "policy_loss": total_ploss / n,
         "value_loss": total_vloss / n,
+        "lr": optimizer.param_groups[0]["lr"],
+        "grad_steps": n,
     }
