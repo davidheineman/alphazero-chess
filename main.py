@@ -27,7 +27,6 @@ def parse_args():
     p.add_argument("--iterations", type=int)
     p.add_argument("--checkpoint-dir", type=str, default="checkpoints")
     p.add_argument("--pretrain", type=str, help="Path to pretrained checkpoint to start from")
-    p.add_argument("--eval-warmup", type=int, default=10, help="Skip eval gating for first N iterations")
     p.add_argument("--wandb-project", type=str, default="mcts")
     p.add_argument("--wandb-entity", type=str, default="bobcrables")
     return p.parse_args()
@@ -129,36 +128,21 @@ def main():
         train_time = time.time() - t0
         print(f"  Average loss: {loss_dict['loss']:.4f} ({train_time:.1f}s)")
 
-        # Evaluation
+        # Evaluation (tracking only — always keep latest network)
         t0 = time.time()
-        in_warmup = iteration <= args.eval_warmup
+        print(f"\n[3/3] Evaluating current vs previous best...")
+        win_rate, wins, draws, losses = evaluate(network, best_net, config)
+        eval_time = time.time() - t0
+        print(f"  Results: W={wins} D={draws} L={losses} "
+              f"(win rate: {win_rate:.1%})")
 
-        if in_warmup:
-            print(f"\n[3/3] Warmup iteration {iteration}/{args.eval_warmup} — keeping network (no eval gate)")
-            win_rate, wins, draws, losses = 0.0, 0, 0, 0
-            eval_time = 0.0
-            accepted = True
-            best_net = copy.deepcopy(network)
-            best_iteration = iteration
-            torch.save(best_net.state_dict(), f"{ckpt_dir}/best.pt")
-        else:
-            print(f"\n[3/3] Evaluating new network vs best...")
-            win_rate, wins, draws, losses = evaluate(network, best_net, config)
-            eval_time = time.time() - t0
-            print(f"  Results: W={wins} D={draws} L={losses} "
-                  f"(win rate: {win_rate:.1%})")
+        accepted = win_rate >= config.win_threshold
+        if accepted:
+            print(f"  >>> New best network!")
 
-            accepted = win_rate >= config.win_threshold
-            if accepted:
-                print(f"  >>> New best network! (win rate {win_rate:.1%} >= "
-                      f"{config.win_threshold:.1%})")
-                best_net = copy.deepcopy(network)
-                best_iteration = iteration
-                torch.save(best_net.state_dict(), f"{ckpt_dir}/best.pt")
-            else:
-                print(f"  Keeping old network (win rate {win_rate:.1%} < "
-                      f"{config.win_threshold:.1%})")
-                network.load_state_dict(best_net.state_dict())
+        best_net = copy.deepcopy(network)
+        best_iteration = iteration
+        torch.save(best_net.state_dict(), f"{ckpt_dir}/best.pt")
 
         torch.save(network.state_dict(), f"{ckpt_dir}/iter_{iteration:04d}.pt")
 
