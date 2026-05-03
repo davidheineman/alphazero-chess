@@ -25,7 +25,7 @@ run:
 
 stockfish:
   games: 4
-  skill_level: 0
+  max_skill: 5
   every_n_iters: 10
 
 pretrain:

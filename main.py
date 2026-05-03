@@ -11,7 +11,7 @@ from alphazero.network import AlphaZeroNet
 from alphazero.self_play import run_self_play
 from alphazero.trainer import ReplayBuffer, train_network
 from alphazero.arena import evaluate
-from alphazero.stockfish_eval import eval_vs_stockfish
+from alphazero.stockfish_eval import estimate_elo
 
 
 def get_device() -> str:
@@ -106,27 +106,24 @@ def main():
             "eval/time_s": ev_time,
         }
 
-        # Stockfish eval
+        # Stockfish ELO estimation
         sf = cfg.get("stockfish", {})
         if sf.get("enabled", False) and iteration % sf.get("every_n_iters", 5) == 0:
             t0 = time.time()
-            sf_result = eval_vs_stockfish(
+            print(f"  Stockfish ELO sweep:")
+            elo_result = estimate_elo(
                 network, cfg, device,
-                num_games=sf.games, skill_level=sf.skill_level,
-                stockfish_path=sf.path, move_time=sf.move_time,
+                games_per_level=sf.get("games", 4),
+                stockfish_path=sf.get("path", "stockfish"),
+                move_time=sf.get("move_time", 0.01),
+                max_skill=sf.get("max_skill", 5),
             )
             sf_time = time.time() - t0
-            print(f"  Stockfish (skill={sf_result['skill_level']}, ~{sf_result['elo_estimate']} ELO): "
-                  f"W={sf_result['wins']} D={sf_result['draws']} L={sf_result['losses']} "
-                  f"(win_rate={sf_result['win_rate']:.1%}) {sf_time:.1f}s")
-            log_data.update({
-                "stockfish/win_rate": sf_result["win_rate"],
-                "stockfish/wins": sf_result["wins"],
-                "stockfish/draws": sf_result["draws"],
-                "stockfish/losses": sf_result["losses"],
-                "stockfish/elo_estimate": sf_result["elo_estimate"],
-                "stockfish/time_s": sf_time,
-            })
+            print(f"  Estimated ELO: {elo_result['estimated_elo']} ({sf_time:.1f}s)")
+            log_data["stockfish/estimated_elo"] = elo_result["estimated_elo"]
+            log_data["stockfish/time_s"] = sf_time
+            for lvl in elo_result["levels"]:
+                log_data[f"stockfish/skill_{lvl['skill']}_wr"] = lvl["wr"]
 
         wandb.log(log_data)
         print()

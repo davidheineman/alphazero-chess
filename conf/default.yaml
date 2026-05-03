@@ -31,8 +31,8 @@ eval:
 stockfish:
   enabled: true
   path: stockfish
-  games: 6
-  skill_level: 1
+  games: 4
+  max_skill: 10
   move_time: 0.01
   every_n_iters: 5
 
